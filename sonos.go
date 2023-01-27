@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/huin/goupnp"
@@ -63,27 +64,41 @@ func Discover(ctx context.Context) (*Client, error) {
 
 type Device struct {
 	dev *goupnp.Device
-	av1 *soap.SOAPClient
+}
+
+func serviceClient(dev *goupnp.Device, serviceType string) (*soap.SOAPClient, error) {
+	svcs := dev.FindService(serviceType)
+	if len(svcs) == 0 {
+		return nil, fmt.Errorf("unknown service %q for device", serviceType)
+	}
+	return svcs[0].NewSOAPClient(), nil
+}
+
+func (d *Device) soap(ctx context.Context, serviceType, action string, in, out interface{}) error {
+	sc, err := serviceClient(d.dev, serviceType)
+	if err != nil {
+		return err
+	}
+	return sc.PerformActionCtx(ctx, serviceType, action, in, out)
 }
 
 func (c *Client) ZoneDevice(ctx context.Context, zone string) (*Device, error) {
 	// Find the first device in the zone with the AV1 service.
 	// This should be the most usable device.
 	for _, dev := range c.zones[zone] {
-		svcs := dev.FindService(av1.URN_AVTransport_1)
-		if len(svcs) == 0 {
+		_, err := serviceClient(dev, av1.URN_AVTransport_1)
+		if err != nil {
 			continue
 		}
 		return &Device{
 			dev: dev,
-			av1: svcs[0].NewSOAPClient(),
 		}, nil
 	}
 	return nil, fmt.Errorf("did not find an AV1 service in zone %q", zone)
 }
 
 func (d *Device) Ungroup(ctx context.Context) error {
-	err := d.av1.PerformActionCtx(ctx, av1.URN_AVTransport_1, "BecomeCoordinatorOfStandaloneGroup", struct {
+	err := d.soap(ctx, av1.URN_AVTransport_1, "BecomeCoordinatorOfStandaloneGroup", struct {
 		InstanceID string
 	}{InstanceID: "0"}, &struct{}{})
 	if err != nil {
@@ -113,7 +128,7 @@ var playModeIDs = map[PlayMode]string{
 }
 
 func (d *Device) SetPlayMode(ctx context.Context, mode PlayMode) error {
-	err := d.av1.PerformActionCtx(ctx, av1.URN_AVTransport_1, "SetPlayMode", struct {
+	err := d.soap(ctx, av1.URN_AVTransport_1, "SetPlayMode", struct {
 		InstanceID  string
 		NewPlayMode string
 	}{
@@ -122,6 +137,23 @@ func (d *Device) SetPlayMode(ctx context.Context, mode PlayMode) error {
 	}, &struct{}{})
 	if err != nil {
 		return fmt.Errorf("setting play mode: %w", err)
+	}
+	return nil
+}
+
+// SetVolume sets the devices volume, in range [0,100].
+func (d *Device) SetVolume(ctx context.Context, volume int) error {
+	err := d.soap(ctx, "urn:schemas-upnp-org:service:RenderingControl:1", "SetVolume", struct {
+		InstanceID    string
+		Channel       string
+		DesiredVolume string
+	}{
+		InstanceID:    "0",
+		Channel:       "Master",
+		DesiredVolume: strconv.Itoa(volume),
+	}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("setting volume: %w", err)
 	}
 	return nil
 }
