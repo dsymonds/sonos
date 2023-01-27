@@ -91,3 +91,37 @@ func (d *Device) Ungroup(ctx context.Context) error {
 	}
 	return nil
 }
+
+type PlayMode int
+
+const (
+	NormalPlayMode PlayMode = iota
+	RepeatAll
+	RepeatOne
+	Shuffle
+	ShuffleRepeat
+	ShuffleRepeatOne
+)
+
+var playModeIDs = map[PlayMode]string{
+	NormalPlayMode:   "NORMAL",
+	RepeatAll:        "REPEAT_ALL",
+	RepeatOne:        "REPEAT_ONE",
+	Shuffle:          "SHUFFLE_NOREPEAT",
+	ShuffleRepeat:    "SHUFFLE",
+	ShuffleRepeatOne: "SHUFFLE_REPEAT_ONE",
+}
+
+func (d *Device) SetPlayMode(ctx context.Context, mode PlayMode) error {
+	err := d.av1.PerformActionCtx(ctx, av1.URN_AVTransport_1, "SetPlayMode", struct {
+		InstanceID  string
+		NewPlayMode string
+	}{
+		InstanceID:  "0",
+		NewPlayMode: playModeIDs[mode],
+	}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("setting play mode: %w", err)
+	}
+	return nil
+}
