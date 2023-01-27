@@ -107,6 +107,16 @@ func (d *Device) Ungroup(ctx context.Context) error {
 	return nil
 }
 
+func (d *Device) ClearQueue(ctx context.Context) error {
+	err := d.soap(ctx, av1.URN_AVTransport_1, "RemoveAllTracksFromQueue", struct {
+		InstanceID string
+	}{InstanceID: "0"}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("clearing queue: %w", err)
+	}
+	return nil
+}
+
 type PlayMode int
 
 const (
