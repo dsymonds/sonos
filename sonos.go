@@ -2,6 +2,7 @@ package sonos
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"log"
 	"strconv"
@@ -165,5 +166,89 @@ func (d *Device) SetVolume(ctx context.Context, volume int) error {
 	if err != nil {
 		return fmt.Errorf("setting volume: %w", err)
 	}
+	return nil
+}
+
+func (d *Device) Play(ctx context.Context) error {
+	err := d.soap(ctx, av1.URN_AVTransport_1, "Play", struct {
+		InstanceID string
+		Speed      string
+	}{
+		InstanceID: "0",
+		Speed:      "1",
+	}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("playing: %w", err)
+	}
+	return nil
+}
+
+func (d *Device) LoadSonosPlaylist(ctx context.Context, playlistName string) error {
+	var raw struct {
+		Result string // DIDL-Lite XML
+	}
+	err := d.soap(ctx, av1.URN_ContentDirectory_1, "Browse", struct {
+		ObjectID       string
+		BrowseFlag     string
+		Filter         string
+		StartingIndex  string
+		RequestedCount string
+		SortCriteria   string
+	}{
+		ObjectID:       "SQ:", // TODO: add a search query
+		BrowseFlag:     "BrowseDirectChildren",
+		Filter:         "*", // all fields
+		StartingIndex:  "0",
+		RequestedCount: "100",
+		SortCriteria:   "+upnp:artist,+dc:title",
+	}, &raw)
+	if err != nil {
+		return fmt.Errorf("browsing: %w", err)
+	}
+
+	var didl struct {
+		Container []struct {
+			ID    string `xml:"id,attr"`
+			Title string `xml:"title"`
+			Res   string `xml:"res"`
+		} `xml:"container"`
+	}
+	if xml.Unmarshal([]byte(raw.Result), &didl); err != nil {
+		return fmt.Errorf("unmarshaling DIDL-Lite XML: %w", err)
+	}
+
+	var uri string
+	for _, c := range didl.Container {
+		if c.Title == playlistName {
+			uri = c.Res
+			break
+		}
+	}
+	if uri == "" {
+		return fmt.Errorf("did not find Sonos playlist named %q (checked %d)", playlistName, len(didl.Container))
+	}
+
+	// Add the playlist.
+	var resp struct {
+		NumTracksAdded string
+		NewQueueLength string
+	}
+	err = d.soap(ctx, av1.URN_AVTransport_1, "AddURIToQueue", struct {
+		InstanceID                      string
+		EnqueuedURI                     string
+		EnqueuedURIMetaData             string
+		DesiredFirstTrackNumberEnqueued string
+		EnqueueAsNext                   string
+	}{
+		InstanceID:                      "0",
+		EnqueuedURI:                     uri,
+		DesiredFirstTrackNumberEnqueued: "1", // add to end
+		EnqueueAsNext:                   "1",
+	}, &resp)
+	if err != nil {
+		return fmt.Errorf("adding to queue: %w", err)
+	}
+	_ = resp // TODO: report stats
+
 	return nil
 }
