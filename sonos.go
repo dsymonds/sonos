@@ -84,9 +84,14 @@ func (d *Device) soap(ctx context.Context, serviceType, action string, in, out i
 }
 
 func (c *Client) ZoneDevice(ctx context.Context, zone string) (*Device, error) {
+	devs, ok := c.zones[zone]
+	if !ok {
+		return nil, fmt.Errorf("unknown zone %q, or it has no devices", zone)
+	}
+
 	// Find the first device in the zone with the AV1 service.
 	// This should be the most usable device.
-	for _, dev := range c.zones[zone] {
+	for _, dev := range devs {
 		_, err := serviceClient(dev, av1.URN_AVTransport_1)
 		if err != nil {
 			continue
