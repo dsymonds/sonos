@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/huin/goupnp"
 	"github.com/huin/goupnp/dcps/av1"
@@ -170,6 +171,30 @@ func (d *Device) SetVolume(ctx context.Context, volume int) error {
 	}, &struct{}{})
 	if err != nil {
 		return fmt.Errorf("setting volume: %w", err)
+	}
+	return nil
+}
+
+func (d *Device) SetSleepTimer(ctx context.Context, duration time.Duration) error {
+	var dur string
+	if duration > 0 {
+		hh := duration / time.Hour
+		duration -= hh * time.Hour
+		mm := duration / time.Minute
+		duration -= mm * time.Minute
+		ss := duration / time.Second
+		dur = fmt.Sprintf("%02d:%02d:%02d", hh, mm, ss)
+	}
+
+	err := d.soap(ctx, av1.URN_AVTransport_1, "ConfigureSleepTimer", struct {
+		InstanceID            string
+		NewSleepTimerDuration string // "hh:mm:ss" or empty string
+	}{
+		InstanceID:            "0",
+		NewSleepTimerDuration: dur,
+	}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("setting sleep timer: %w", err)
 	}
 	return nil
 }
