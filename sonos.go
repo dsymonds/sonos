@@ -84,6 +84,11 @@ func (d *Device) soap(ctx context.Context, serviceType, action string, in, out i
 	return sc.PerformActionCtx(ctx, serviceType, action, in, out)
 }
 
+// uid returns the unique ID for the device. It is the identifier starting with "RINCON_".
+func (d *Device) uid() string {
+	return strings.TrimPrefix(d.dev.UDN, "uuid:")
+}
+
 func (c *Client) ZoneDevice(ctx context.Context, zone string) (*Device, error) {
 	devs, ok := c.zones[zone]
 	if !ok {
@@ -102,6 +107,22 @@ func (c *Client) ZoneDevice(ctx context.Context, zone string) (*Device, error) {
 		}, nil
 	}
 	return nil, fmt.Errorf("did not find an AV1 service in zone %q", zone)
+}
+
+// Join adds the device to a group coordinated by the identified master device.
+func (d *Device) Join(ctx context.Context, master *Device) error {
+	err := d.soap(ctx, av1.URN_AVTransport_1, "SetAVTransportURI", struct {
+		InstanceID         string
+		CurrentURI         string // the destination device
+		CurrentURIMetaData string // left empty
+	}{
+		InstanceID: "0",
+		CurrentURI: "x-rincon:" + master.uid(),
+	}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("joining: %w", err)
+	}
+	return nil
 }
 
 func (d *Device) Ungroup(ctx context.Context) error {
