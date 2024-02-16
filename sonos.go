@@ -237,6 +237,18 @@ func (d *Device) Play(ctx context.Context) error {
 	return nil
 }
 
+func (d *Device) Stop(ctx context.Context) error {
+	err := d.soap(ctx, av1.URN_AVTransport_1, "Stop", struct {
+		InstanceID string
+	}{
+		InstanceID: "0",
+	}, &struct{}{})
+	if err != nil {
+		return fmt.Errorf("stopping: %w", err)
+	}
+	return nil
+}
+
 func (d *Device) LoadSonosPlaylist(ctx context.Context, playlistName string) error {
 	var raw struct {
 		Result string // DIDL-Lite XML
