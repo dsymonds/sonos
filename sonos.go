@@ -199,6 +199,36 @@ func (d *Device) SetVolume(ctx context.Context, volume int) error {
 	return nil
 }
 
+// RampVolume smoothly adjusts the device's volume to the target.
+// It returns how long the ramp is expected to take.
+func (d *Device) RampVolume(ctx context.Context, volume int) (time.Duration, error) {
+	var resp struct {
+		RampTime string // ui4
+	}
+	err := d.soap(ctx, "urn:schemas-upnp-org:service:RenderingControl:1", "RampToVolume", struct {
+		InstanceID       string
+		Channel          string
+		RampType         string
+		DesiredVolume    string // ui2
+		ResetVolumeAfter string // bool
+		ProgramURI       string
+	}{
+		InstanceID:       "0",
+		Channel:          "Master",
+		RampType:         "SLEEP_TIMER_RAMP_TYPE", // there's also ALARM_RAMP_TYPE and AUTOPLAY_RAMP_TYPE
+		DesiredVolume:    strconv.Itoa(volume),
+		ResetVolumeAfter: "0", // == false
+	}, &resp)
+	if err != nil {
+		return 0, fmt.Errorf("ramping volume: %w", err)
+	}
+	dur, err := strconv.Atoi(resp.RampTime)
+	if err != nil {
+		return 0, fmt.Errorf("parsing expected ramp time %q: %w", resp.RampTime, err)
+	}
+	return time.Duration(dur) * time.Second, nil // Empirically checked only.
+}
+
 func (d *Device) SetSleepTimer(ctx context.Context, duration time.Duration) error {
 	var dur string
 	if duration > 0 {
