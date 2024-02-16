@@ -64,6 +64,9 @@ func Discover(ctx context.Context) (*Client, error) {
 	return c, nil
 }
 
+func (c *Client) NumDevices() int { return len(c.devices) }
+func (c *Client) NumZones() int   { return len(c.zones) }
+
 type Device struct {
 	dev *goupnp.Device
 }
